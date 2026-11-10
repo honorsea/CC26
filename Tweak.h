@@ -7,8 +7,6 @@
 
 static NSString *domain = @"com.cureux.cc26";
 static NSString *preferencesNotification = @"com.cureux.cc26/preferences.changed";
-static NSString *appearanceDomain = @"com.cureux.cc26preferences";
-static NSString *appearanceNotification = @"com.cureux.cc26preferences/ReloadPrefs";
 
 // preferences variables
 static BOOL enabled;
@@ -44,27 +42,10 @@ static CGFloat mediaLabelLineSpacing = 1.0;
 @interface MRUTransportButton : UIButton @end
 @interface MRUControlCenterViewController : UIViewController @end
 @interface MRUNowPlayingView : UIView @end
-@interface MRUArtworkView : UIView
-@property (nonatomic, strong) UIImage *artworkImage;
-@end
-@interface MRUNowPlayingControlsView : UIView {
-    UIView *_headerView;
-    UIView *_transportControlsView;
-}
-@property (nonatomic, strong) UIView *headerView;
-@property (nonatomic, strong) UIView *transportControlsView;
-@end
+@interface MRUNowPlayingControlsView : UIView @end
 @interface MRUNowPlayingLabelView : UIView @end
 @interface MPUMarqueeView : UIView @end
-@interface MRUNowPlayingHeaderView : UIControl {
-    MRUArtworkView *_artworkView;
-    UIView *_labelView;
-    UIView *_routingButton;
-}
-@property (nonatomic, strong) MRUArtworkView *artworkView;
-@property (nonatomic, strong) UIView *labelView;
-@property (nonatomic, strong) UIView *routingButton;
-@end
+@interface MRUNowPlayingHeaderView : UIControl @end
 @interface MRUNowPlayingRoutingButton : UIButton @end
 @interface MRUNowPlayingTransportControlsView : UIView @end
 @interface CCUIModularControlCenterViewController : UIViewController @end
