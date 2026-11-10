@@ -11,12 +11,66 @@
 			<string></string>
 		</dict>
 		<dict>
-            <key>cell</key>
-            <string>PSLinkListCell</string>
-            <key>default</key>
-            <string></string>
-            <key>defaults</key>
-            <string>com.cureux.cc26</string>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>MODULE_APPEARANCE</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.cureux.cc26preferences</string>
+			<key>key</key>
+			<string>showBorders</string>
+			<key>label</key>
+			<string>SHOW_MODULE_BORDERS</string>
+			<key>PostNotification</key>
+			<string>com.cureux.cc26preferences/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.cureux.cc26preferences</string>
+			<key>key</key>
+			<string>ios18Lightness</string>
+			<key>label</key>
+			<string>IOS18_MODULE_LIGHTNESS</string>
+			<key>PostNotification</key>
+			<string>com.cureux.cc26preferences/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>1.0</real>
+			<key>defaults</key>
+			<string>com.cureux.cc26preferences</string>
+			<key>key</key>
+			<string>cornerRoundness</string>
+			<key>label</key>
+			<string>CORNER_ROUNDNESS</string>
+			<key>min</key>
+			<real>0.5</real>
+			<key>max</key>
+			<real>1.5</real>
+			<key>showValue</key>
+			<true/>
+			<key>PostNotification</key>
+			<string>com.cureux.cc26preferences/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string></string>
+			<key>defaults</key>
+			<string>com.cureux.cc26</string>
             <key>detail</key>
             <string>CC26ButtonsListController</string>
             <key>height</key>
@@ -103,6 +157,22 @@
 			<string>person.crop.circle.fill</string>
 			<key>action</key>
 			<string>openDeveloper</string>
+			<key>height</key>
+			<integer>56</integer>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>cellClass</key>
+			<string>CC26CreditCell</string>
+			<key>label</key>
+			<string>honorsea</string>
+			<key>subtitle</key>
+			<string>DEVELOPER</string>
+			<key>icon</key>
+			<string>person.crop.circle.fill</string>
+			<key>action</key>
+			<string>openHonorsea</string>
 			<key>height</key>
 			<integer>56</integer>
 		</dict>

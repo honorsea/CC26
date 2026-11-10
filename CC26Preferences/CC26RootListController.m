@@ -83,7 +83,7 @@
 - (void)setupButtonMenu {
 	UIAction *respring = [UIAction actionWithTitle:@"Respring" image:[UIImage systemImageNamed:@"arrow.clockwise.circle.fill"] identifier:nil handler:^(__kindof UIAction *_Nonnull action) {
 		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.75 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^(void){
-			SBSRelaunchAction *respringAction = [NSClassFromString(@"SBSRelaunchAction") actionWithReason:@"RestartRenderServer" options:4 targetURL:[NSURL URLWithString:@"prefs:root=Ampere"]];
+			SBSRelaunchAction *respringAction = [NSClassFromString(@"SBSRelaunchAction") actionWithReason:@"RestartRenderServer" options:4 targetURL:[NSURL URLWithString:@"prefs:root=CC26"]];
 			FBSSystemService *frontBoardService = [NSClassFromString(@"FBSSystemService") sharedService];
 			NSSet *actions = [NSSet setWithObject:respringAction];
 			[frontBoardService sendActions:actions withResult:nil];
@@ -107,6 +107,9 @@
 }
 - (void)openDeveloper {
 	[[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://github.com/therealhoodboy"] options:@{} completionHandler:nil];
+}
+- (void)openHonorsea {
+	[[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://github.com/honorsea"] options:@{} completionHandler:nil];
 }
 @end
 
@@ -235,7 +238,7 @@
 	[[NSUserDefaults standardUserDefaults] setObject:[self dictionaryForColor:viewController.selectedColor] forKey:[self.specifier.properties[@"key"] stringByAppendingString:@"Dict"] inDomain:domain];
 	[[NSUserDefaults standardUserDefaults] synchronize];
 	self.control.backgroundColor = [self selectedColor];
-	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (CFStringRef)@"com.mtac.amp/statusbar.changed", nil, nil, true);
+	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (CFStringRef)@"com.cureux.cc26/preferences.changed", nil, nil, true);
 }
 - (NSDictionary *)dictionaryForColor:(UIColor *)color {
 	const CGFloat *components = CGColorGetComponents(color.CGColor);

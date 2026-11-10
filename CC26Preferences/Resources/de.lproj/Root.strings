@@ -2,3 +2,8 @@
 "Sliders" = "Schieberegler";
 "Media Player" = "Mediaplayer";
 "Credits" = "Danksagungen";
+"MODULE_APPEARANCE" = "Modul-Erscheinungsbild";
+"SHOW_MODULE_BORDERS" = "Modulrahmen anzeigen";
+"IOS18_MODULE_LIGHTNESS" = "iOS 18 Modul-Helligkeit";
+"CORNER_ROUNDNESS" = "Eckenrundung";
+"DEVELOPER" = "Entwickler";

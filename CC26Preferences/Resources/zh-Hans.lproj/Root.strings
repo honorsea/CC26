@@ -2,3 +2,8 @@
 "Sliders" = "音量亮度滑块";
 "Media Player" = "媒体播放模块";
 "Credits" = "致谢";
+"MODULE_APPEARANCE" = "模块外观";
+"SHOW_MODULE_BORDERS" = "显示模块边框";
+"IOS18_MODULE_LIGHTNESS" = "iOS 18 模块亮度";
+"CORNER_ROUNDNESS" = "圆角弧度";
+"DEVELOPER" = "开发者";

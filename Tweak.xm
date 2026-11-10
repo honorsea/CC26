@@ -3,19 +3,50 @@
 
 #pragma mark - Border radius helpers
 
-CGFloat getModuleRadius(UIView *moduleView) {
-    CGFloat width = moduleView.frame.size.width;
-    CGFloat height = moduleView.frame.size.height;
-    if ((width < 100 && height < 100) && width == height) { // 1x1 module
-        return width / 2;
-    } else if ((width > height) || (height > width)) {
-        return fminf(width, height) / 2; // Rectangular module
-    } else if ((width > 100 && height > 100) && width == height) { // large square module
-        return width / 4;
-    } else  if (width > 100 && height > 100) { // 1x1 module
-        return width / 4;
+static BOOL showBorders = NO;
+static BOOL ios18Lightness = YES;
+static CGFloat cornerRoundness = 1.0;
+
+static CGFloat getModuleRadius(CGRect bounds, CGFloat multiplier) {
+    CGFloat shortSide = MIN(bounds.size.width, bounds.size.height);
+    if (shortSide <= 0.0) return 0.0;
+
+    CGFloat radius;
+    if (fabs(bounds.size.width - bounds.size.height) < 5.0 && shortSide < 90.0) {
+        return shortSide / 2.0;
+    } else if (fabs(bounds.size.width - bounds.size.height) < 5.0 && shortSide >= 90.0) {
+        radius = shortSide * (30.0 / 152.0) * multiplier;
+    } else {
+        radius = shortSide * (23.0 / 68.0) * multiplier;
     }
-    return 0; // may need more cases for odd shaped modules such as CCSupport's 2x4 module
+    return MIN(radius, shortSide / 2.0);
+}
+
+static UIView *cc26_viewForIvar(UIView *view, const char *name) {
+    if (!view) return nil;
+    Ivar ivar = class_getInstanceVariable(object_getClass(view), name);
+    return ivar ? object_getIvar(view, ivar) : nil;
+}
+
+static void cc26_setContinuousRadius(UIView *view, CGFloat radius) {
+    if (!view) return;
+    view.layer.cornerRadius = radius;
+    view.layer.cornerCurve = kCACornerCurveContinuous;
+    view.layer.continuousCorners = YES;
+}
+
+static void cc26_setMaterialLightness(UIView *materialView, BOOL enabled) {
+    if (!materialView) return;
+    UIView *overlay = [materialView viewWithTag:0xCC2618];
+    if (enabled && !overlay) {
+        overlay = [[UIView alloc] initWithFrame:materialView.bounds];
+        overlay.tag = 0xCC2618;
+        overlay.userInteractionEnabled = NO;
+        overlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [materialView insertSubview:overlay atIndex:0];
+    }
+    overlay.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
+    overlay.hidden = !enabled;
 }
 
 NSArray *findAllSubviewsOfClass(UIView *view, Class cls) {
@@ -97,257 +128,6 @@ static BOOL cc26_isInsideCCCompact(UIView *view) {
     }
     return YES;
 }
-
-static void cc26_forceSubviewAlphas(UIView *view) {
-    for (UIView *sub in view.subviews) {
-        if (!sub.hidden) {
-            sub.layer.opacity = 1.0;
-        }
-    }
-}
-
-%hook MRUNowPlayingHeaderView
-- (void)layoutSubviews {
-    %orig;
-
-    // Only apply inside Control Center
-    BOOL isInsideCC = NO;
-    UIView *v = self;
-    while (v.superview) {
-        if ([v isKindOfClass:%c(CCUIContentModuleContentContainerView)]) {
-            isInsideCC = YES;
-            break;
-        }
-        v = v.superview;
-    }
-    if (!isInsideCC) return;
-
-    // Skip if ancestor MRUNowPlayingView is in expanded layout
-    UIView *parent = self.superview;
-    while (parent) {
-        if ([parent isKindOfClass:%c(MRUNowPlayingView)]) {
-            @try {
-                NSInteger layout = [[parent valueForKey:@"_layout"] integerValue];
-                if (layout == 2 || layout == 1) {
-                    // Reset masksToBounds we set in collapsed mode
-                    Ivar routingIvar = class_getInstanceVariable(object_getClass(self), "_routingButton");
-                    if (routingIvar) {
-                        UIView *rb = object_getIvar(self, routingIvar);
-                        if (rb) {
-                            rb.layer.masksToBounds = NO;
-                            rb.layer.cornerRadius = 0;
-                            rb.backgroundColor = [UIColor clearColor];
-                        }
-                    }
-                    return;
-                }
-            } @catch (NSException *e) {}
-            break;
-        }
-        parent = parent.superview;
-    }
-
-    CGFloat W = self.bounds.size.width;
-    CGFloat H = self.bounds.size.height;
-
-    // --- Read preference overrides (negative = use default) ---
-    CGFloat prefArtX   = mediaArtworkX;
-    CGFloat prefArtY   = mediaArtworkY;
-    CGFloat prefArtSz  = mediaArtworkSize;
-    CGFloat prefBtnX   = mediaRoutingBtnX;
-    CGFloat prefBtnY   = mediaRoutingBtnY;
-    CGFloat prefBtnSz  = mediaRoutingBtnSize;
-    CGFloat prefLblX   = mediaLabelX;
-    CGFloat prefLblY   = mediaLabelY;
-    CGFloat prefLblW   = mediaLabelW;
-    CGFloat prefLblH   = mediaLabelH;
-
-    // === ROW 1: Artwork LEFT + Routing button RIGHT, same vertical center ===
-
-    // Artwork
-    UIView *artworkView = nil;
-    Ivar artworkIvar = class_getInstanceVariable(object_getClass(self), "_artworkView");
-    if (artworkIvar) artworkView = object_getIvar(self, artworkIvar);
-
-    CGFloat artSize = (prefArtSz >= 0) ? prefArtSz : 50.0;
-    CGFloat btnSize = (prefBtnSz >= 0) ? prefBtnSz : 42.0;
-
-    CGFloat artX = (prefArtX >= 0) ? prefArtX : 11.0;
-    CGFloat artY = (prefArtY >= 0) ? prefArtY : 8.0;
-
-    if (artworkView) {
-        artworkView.translatesAutoresizingMaskIntoConstraints = YES;
-        artworkView.frame = CGRectMake(artX, artY, artSize, artSize);
-        artworkView.alpha = 1.0;
-        artworkView.layer.cornerRadius = artSize * 0.22;
-        artworkView.layer.masksToBounds = YES;
-        artworkView.clipsToBounds = YES;
-    }
-
-    // Routing button (AirPlay) — same row, right-aligned, vertically centered with artwork
-    UIView *routingButton = nil;
-    Ivar routingIvar = class_getInstanceVariable(object_getClass(self), "_routingButton");
-    if (routingIvar) routingButton = object_getIvar(self, routingIvar);
-
-    CGFloat btnX = (prefBtnX >= 0) ? prefBtnX : 85.0;
-    CGFloat btnY = (prefBtnY >= 0) ? prefBtnY : artY + (artSize - btnSize) / 2.0;
-
-    if (routingButton) {
-        routingButton.alpha = 1.0;
-        routingButton.translatesAutoresizingMaskIntoConstraints = YES;
-        routingButton.frame = CGRectMake(btnX, btnY, btnSize, btnSize);
-        routingButton.backgroundColor = [UIColor colorWithWhite:0.8 alpha:0.25];
-        routingButton.layer.cornerRadius = btnSize / 2.0;
-        routingButton.layer.masksToBounds = YES;
-    }
-
-    // === ROW 2: Label view BELOW artwork+routing row, full width ===
-    UIView *labelView = nil;
-    Ivar labelIvar = class_getInstanceVariable(object_getClass(self), "_labelView");
-    if (labelIvar) labelView = object_getIvar(self, labelIvar);
-
-    if (labelView) {
-        CGFloat labelX = (prefLblX >= 0) ? prefLblX : 0.0;
-        CGFloat labelY = (prefLblY >= 0) ? prefLblY : 63.0;
-        CGFloat labelW = (prefLblW >= 0) ? prefLblW : W;
-        CGFloat labelH = (prefLblH >= 0) ? prefLblH : MAX(H - labelY, 35.0);
-        labelView.translatesAutoresizingMaskIntoConstraints = YES;
-        labelView.frame = CGRectMake(labelX, labelY, labelW, labelH);
-        labelView.alpha = 1.0;
-        labelView.layer.opacity = 1.0;
-        labelView.clipsToBounds = YES;
-        cc26_forceSubviewAlphas(labelView);
-    }
-
-    self.clipsToBounds = NO;
-    adjustLabelFontsInView(self, NO);
-}
-%end
-
-%hook MPUMarqueeView
-- (void)setAlpha:(CGFloat)alpha {
-    if ([self.superview isKindOfClass:%c(MRUNowPlayingLabelView)] && cc26_isInsideCCCompact(self)) {
-        %orig(1.0);
-        self.layer.opacity = 1.0;
-        cc26_forceSubviewAlphas(self);
-        return;
-    }
-    %orig;
-}
-%end
-
-%hook MRUNowPlayingLabelView
-- (void)setAlpha:(CGFloat)alpha {
-    if (cc26_isInsideCCCompact(self)) {
-        %orig(1.0);
-        self.layer.opacity = 1.0;
-        cc26_forceSubviewAlphas(self);
-        return;
-    }
-    %orig;
-}
-- (void)layoutSubviews {
-    %orig;
-
-    // Only apply inside Control Center
-    BOOL isInsideCC = NO;
-    UIView *v = self;
-    while (v.superview) {
-        if ([v isKindOfClass:%c(CCUIContentModuleContentContainerView)]) {
-            isInsideCC = YES;
-            break;
-        }
-        v = v.superview;
-    }
-    if (!isInsideCC) return;
-
-    // Skip if expanded
-    UIView *ancestor = self.superview;
-    while (ancestor) {
-        if ([ancestor isKindOfClass:%c(MRUNowPlayingView)]) {
-            @try {
-                NSInteger layout = [[ancestor valueForKey:@"_layout"] integerValue];
-                if (layout == 2 || layout == 1) return;
-            } @catch (NSException *e) {}
-            break;
-        }
-        ancestor = ancestor.superview;
-    }
-
-    // Get marquee views and standalone label views
-    UIView *titleMarquee = nil;
-    UIView *subtitleMarquee = nil;
-    UIView *titleLabel = nil;
-    UIView *subtitleLabel = nil;
-
-    Ivar iv;
-    iv = class_getInstanceVariable(object_getClass(self), "_titleMarqueeView");
-    if (iv) titleMarquee = object_getIvar(self, iv);
-    iv = class_getInstanceVariable(object_getClass(self), "_subtitleMarqueeView");
-    if (iv) subtitleMarquee = object_getIvar(self, iv);
-    iv = class_getInstanceVariable(object_getClass(self), "_titleLabel");
-    if (iv) titleLabel = object_getIvar(self, iv);
-    iv = class_getInstanceVariable(object_getClass(self), "_subtitleLabel");
-    if (iv) subtitleLabel = object_getIvar(self, iv);
-
-    // Use marquee views for positioning
-    UIView *titleView = titleMarquee ?: titleLabel;
-    UIView *subtitleView = subtitleMarquee ?: subtitleLabel;
-
-    // _titleLabel/_subtitleLabel are INSIDE the marquee views.
-    // Do NOT touch their hidden state — the system manages it
-    // to avoid duplication with the marquee's own scrolling content.
-
-    // Hide _routeLabel in compact mode (not needed)
-    UIView *routeLabel = nil;
-    iv = class_getInstanceVariable(object_getClass(self), "_routeLabel");
-    if (iv) routeLabel = object_getIvar(self, iv);
-    if (routeLabel) routeLabel.hidden = YES;
-
-    CGFloat lineSpacing = mediaLabelLineSpacing;
-
-    if (titleView && subtitleView) {
-        CGFloat W = self.bounds.size.width;
-        CGFloat titleH = 16.0;
-        CGFloat subtitleH = 14.0;
-
-        titleView.translatesAutoresizingMaskIntoConstraints = YES;
-        subtitleView.translatesAutoresizingMaskIntoConstraints = YES;
-        titleView.clipsToBounds = YES;
-        subtitleView.clipsToBounds = YES;
-        // Force visibility on self and children
-        self.layer.opacity = 1.0;
-        titleView.layer.opacity = 1.0;
-        subtitleView.layer.opacity = 1.0;
-        cc26_forceSubviewAlphas(titleView);
-        cc26_forceSubviewAlphas(subtitleView);
-
-        CGFloat totalH = titleH + lineSpacing + subtitleH;
-        CGFloat startY = (self.bounds.size.height - totalH) / 2.0;
-        if (startY < 0) startY = 0;
-
-        titleView.frame = CGRectMake(0, startY, W, titleH);
-        subtitleView.frame = CGRectMake(0, startY + titleH + lineSpacing, W, subtitleH);
-
-        // Bold title, regular subtitle
-        adjustLabelFontsInView(titleView, YES);
-        adjustLabelFontsInView(subtitleView, NO);
-
-        // Delayed re-force in case system overrides alpha after layout
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.layer.opacity = 1.0;
-            for (UIView *sub in self.subviews) {
-                if (!sub.hidden) {
-                    sub.layer.opacity = 1.0;
-                    for (UIView *inner in sub.subviews) {
-                        inner.layer.opacity = 1.0;
-                    }
-                }
-            }
-        });
-    }
-}
-%end
 
 %hook CCUICAPackageDescription
 - (NSURL *)packageURL {
@@ -439,82 +219,6 @@ static void cc26_forceSubviewAlphas(UIView *view) {
 %end
 
 %hook MRUNowPlayingControlsView
-static BOOL cc26ControlsLayoutInProgress = NO;
-- (void)layoutSubviews {
-    %orig;
-
-    if (cc26ControlsLayoutInProgress) return;
-    cc26ControlsLayoutInProgress = YES;
-
-    BOOL isInsideCC = NO;
-    UIView *v = self;
-    while (v.superview) {
-        if ([v isKindOfClass:%c(CCUIContentModuleContentContainerView)]) {
-            isInsideCC = YES;
-            break;
-        }
-        v = v.superview;
-    }
-    if (!isInsideCC) {
-        cc26ControlsLayoutInProgress = NO;
-        return;
-    }
-
-    // Check parent MRUNowPlayingView layout
-    UIView *npView = self.superview;
-    if ([npView isKindOfClass:%c(MRUNowPlayingView)]) {
-        @try {
-            NSInteger layout = [[npView valueForKey:@"_layout"] integerValue];
-            if (layout == 2 || layout == 1) {
-                cc26ControlsLayoutInProgress = NO;
-                return;
-            }
-        } @catch (NSException *e) {
-            cc26ControlsLayoutInProgress = NO;
-            return;
-        }
-    }
-
-    CGFloat W = self.bounds.size.width;
-    CGFloat H = self.bounds.size.height;
-    CGFloat pad = 8.0;
-
-    // Position headerView: top portion with padding
-    UIView *headerView = nil;
-    Ivar headerIvar = class_getInstanceVariable(object_getClass(self), "_headerView");
-    if (headerIvar) headerView = object_getIvar(self, headerIvar);
-
-    if (headerView) {
-        CGFloat headerHeight = H * 0.65;
-        headerView.translatesAutoresizingMaskIntoConstraints = YES;
-        headerView.frame = CGRectMake(pad, pad, W - 2 * pad, headerHeight);
-        headerView.clipsToBounds = NO;
-        [headerView setNeedsLayout];
-        [headerView layoutIfNeeded];
-    }
-
-    self.clipsToBounds = NO;
-
-    // Position transportControlsView: centered at bottom
-    UIView *transportView = nil;
-    Ivar transportIvar = class_getInstanceVariable(object_getClass(self), "_transportControlsView");
-    if (transportIvar) transportView = object_getIvar(self, transportIvar);
-
-    if (transportView) {
-        CGFloat controlsHeight = transportView.frame.size.height;
-        if (controlsHeight < 20) controlsHeight = 44.0;
-        CGFloat controlsWidth = W * 0.75;
-        CGFloat x = (W - controlsWidth) / 2.0;
-        CGFloat y = H - controlsHeight - pad;
-        transportView.translatesAutoresizingMaskIntoConstraints = YES;
-        transportView.frame = CGRectMake(x, y, controlsWidth, controlsHeight);
-    }
-
-    cc26ControlsLayoutInProgress = NO;
-}
-%end
-
-%hook MRUNowPlayingTransportControlsView
 - (void)layoutSubviews {
     %orig;
 
@@ -529,33 +233,122 @@ static BOOL cc26ControlsLayoutInProgress = NO;
     }
     if (!isInsideCC) return;
 
-    @try {
-        // Walk up to find parent MRUNowPlayingView
-        UIView *ancestor = self.superview;
-        while (ancestor && ![ancestor isKindOfClass:%c(MRUNowPlayingView)]) {
-            ancestor = ancestor.superview;
+    CGFloat W = self.bounds.size.width;
+    CGFloat H = self.bounds.size.height;
+    UIView *placeholder = [self viewWithTag:0xCC26A0];
+    UIView *npView = self.superview;
+    while (npView && ![npView isKindOfClass:%c(MRUNowPlayingView)]) npView = npView.superview;
+    BOOL expanded = W >= 220.0;
+    if (!expanded && npView) {
+        @try {
+            NSInteger layout = [[npView valueForKey:@"_layout"] integerValue];
+            expanded = (layout == 2);
+        } @catch (NSException *e) {}
+    }
+    if (expanded) {
+        placeholder.hidden = YES;
+        UIView *artwork = cc26_viewForIvar(cc26_viewForIvar(self, "_headerView"), "_artworkView");
+        if (artwork) artwork.hidden = NO;
+        return;
+    }
+
+    CGFloat pad = round(W * 0.092);
+    CGFloat artSize = mediaArtworkSize >= 0.0 ? mediaArtworkSize : round(W * 0.29);
+    CGFloat artXOffset = [[[NSUserDefaults standardUserDefaults] objectForKey:@"artworkX" inDomain:domain] floatValue];
+    CGFloat artYOffset = [[[NSUserDefaults standardUserDefaults] objectForKey:@"artworkY" inDomain:domain] floatValue];
+    CGFloat titleXOffset = [[[NSUserDefaults standardUserDefaults] objectForKey:@"titleX" inDomain:domain] floatValue];
+    CGFloat titleYOffset = [[[NSUserDefaults standardUserDefaults] objectForKey:@"titleY" inDomain:domain] floatValue];
+    CGFloat controlsXOffset = [[[NSUserDefaults standardUserDefaults] objectForKey:@"controlsX" inDomain:domain] floatValue];
+    CGFloat controlsYOffset = [[[NSUserDefaults standardUserDefaults] objectForKey:@"controlsY" inDomain:domain] floatValue];
+    CGFloat airplayXOffset = [[[NSUserDefaults standardUserDefaults] objectForKey:@"airplayX" inDomain:domain] floatValue];
+    CGFloat airplayYOffset = [[[NSUserDefaults standardUserDefaults] objectForKey:@"airplayY" inDomain:domain] floatValue];
+    CGFloat artX = (mediaArtworkX >= 0.0 ? mediaArtworkX : pad) + artXOffset;
+    CGFloat artY = (mediaArtworkY >= 0.0 ? mediaArtworkY : pad) + artYOffset;
+    CGRect artFrame = CGRectMake(artX, artY, artSize, artSize);
+
+    UIView *headerView = cc26_viewForIvar(self, "_headerView");
+    UIView *artworkView = cc26_viewForIvar(headerView, "_artworkView");
+    UIView *routingButton = cc26_viewForIvar(headerView, "_routingButton");
+    UIView *labelView = cc26_viewForIvar(headerView, "_labelView");
+    UIView *transportView = cc26_viewForIvar(self, "_transportControlsView");
+
+    if (headerView) {
+        CGRect frame = CGRectMake(0.0, 0.0, W, round(H * 0.68));
+        headerView.translatesAutoresizingMaskIntoConstraints = YES;
+        if (!CGRectEqualToRect(headerView.frame, frame)) headerView.frame = frame;
+        headerView.clipsToBounds = NO;
+    }
+
+    UIView *artworkParent = artworkView.superview ?: headerView;
+    if (artworkView && artworkParent) {
+        CGRect frame = [self convertRect:artFrame toView:artworkParent];
+        artworkView.translatesAutoresizingMaskIntoConstraints = YES;
+        if (!CGRectEqualToRect(artworkView.frame, frame)) artworkView.frame = frame;
+        artworkView.layer.cornerRadius = round(artSize * 0.25);
+        artworkView.layer.cornerCurve = kCACornerCurveContinuous;
+        artworkView.clipsToBounds = YES;
+
+        UIImage *artworkImage = nil;
+        @try { artworkImage = [artworkView valueForKey:@"artworkImage"]; } @catch (NSException *e) {}
+        BOOL hasArtwork = artworkImage != nil;
+        if (!placeholder) {
+            placeholder = [[UIView alloc] initWithFrame:frame];
+            placeholder.tag = 0xCC26A0;
+            placeholder.userInteractionEnabled = NO;
+            placeholder.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.18];
+            placeholder.layer.cornerRadius = round(artSize * 0.25);
+            placeholder.layer.cornerCurve = kCACornerCurveContinuous;
+            [artworkParent insertSubview:placeholder belowSubview:artworkView];
         }
-        if (!ancestor) return;
+        placeholder.frame = frame;
+        placeholder.layer.cornerRadius = round(artSize * 0.25);
+        placeholder.layer.cornerCurve = kCACornerCurveContinuous;
+        placeholder.hidden = hasArtwork;
+        artworkView.hidden = !hasArtwork;
+    }
 
-        NSInteger layout = [[ancestor valueForKey:@"_layout"] integerValue];
-        if (layout == 2) return;
-
-        UIButton *leftButton = [self valueForKey:@"leftButton"];
-        UIButton *rightButton = [self valueForKey:@"rightButton"];
-        UIButton *middleButton = [self valueForKey:@"middleButton"];
-
-        if (leftButton && rightButton && middleButton) {
-            CGFloat viewWidth = self.bounds.size.width;
-            CGFloat centerY = self.bounds.size.height / 2.0;
-            CGFloat spacing = viewWidth * 0.28;
-
-            middleButton.center = CGPointMake(viewWidth / 2.0, centerY);
-            leftButton.center = CGPointMake(viewWidth / 2.0 - spacing, centerY);
-            rightButton.center = CGPointMake(viewWidth / 2.0 + spacing, centerY);
+    CGFloat routeSize = mediaRoutingBtnSize >= 0.0 ? mediaRoutingBtnSize : round(W * 0.22);
+    CGFloat routeX = mediaRoutingBtnX >= 0.0 ? mediaRoutingBtnX : W - pad - routeSize;
+    CGFloat routeY = mediaRoutingBtnY >= 0.0 ? mediaRoutingBtnY : pad + round((artSize - routeSize) / 2.0);
+    CGRect routeFrame = CGRectMake(routeX + airplayXOffset, routeY + airplayYOffset, routeSize, routeSize);
+    if (routingButton) {
+        UIView *routeParent = routingButton.superview ?: headerView;
+        CGRect frame = [self convertRect:routeFrame toView:routeParent];
+        routingButton.translatesAutoresizingMaskIntoConstraints = YES;
+        if (!CGRectEqualToRect(routingButton.frame, frame)) routingButton.frame = frame;
+        routingButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.18];
+        routingButton.layer.cornerRadius = routeSize / 2.0;
+        routingButton.layer.cornerCurve = kCACornerCurveContinuous;
+        routingButton.clipsToBounds = YES;
+        routingButton.tintColor = [UIColor whiteColor];
+        for (UIView *subview in routingButton.subviews) {
+            if ([subview isKindOfClass:[UIImageView class]]) ((UIImageView *)subview).tintColor = [UIColor whiteColor];
         }
+        for (UIView *duplicate in findAllSubviewsOfClass(headerView, %c(MRUNowPlayingRoutingButton))) {
+            if (duplicate != routingButton) duplicate.hidden = YES;
+        }
+    }
 
-    } @catch (NSException *e) {
-        NSLog(@"[CC26] MRUNowPlayingTransportControlsView crash prevented: %@", e);
+    CGFloat labelY = CGRectGetMaxY(artFrame) + round(H * 0.05) + titleYOffset;
+    CGFloat labelH = mediaLabelH >= 0.0 ? mediaLabelH : round(H * 0.20);
+    CGFloat labelX = (mediaLabelX >= 0.0 ? mediaLabelX : pad) + titleXOffset;
+    CGFloat labelW = mediaLabelW >= 0.0 ? mediaLabelW : W - pad * 2.0;
+    if (labelView) {
+        CGRect labelFrame = CGRectMake(labelX, mediaLabelY >= 0.0 ? mediaLabelY : labelY, labelW, labelH);
+        CGRect frame = [self convertRect:labelFrame toView:labelView.superview ?: headerView];
+        labelView.translatesAutoresizingMaskIntoConstraints = YES;
+        if (!CGRectEqualToRect(labelView.frame, frame)) labelView.frame = frame;
+        labelView.clipsToBounds = YES;
+        adjustLabelFontsInView(labelView, NO);
+    }
+
+    if (transportView) {
+        CGFloat transportH = round(H * 0.22);
+        CGRect transportFrame = CGRectMake(pad + controlsXOffset, H - pad - transportH + controlsYOffset, W - pad * 2.0, transportH);
+        CGRect frame = [self convertRect:transportFrame toView:transportView.superview ?: self];
+        transportView.translatesAutoresizingMaskIntoConstraints = YES;
+        if (!CGRectEqualToRect(transportView.frame, frame)) transportView.frame = frame;
+        transportView.hidden = NO;
     }
 }
 %end
@@ -576,93 +369,73 @@ static BOOL cc26ControlsLayoutInProgress = NO;
     CGFloat H = self.bounds.size.height;
     CGFloat minDim = fminf(W, H);
 
-    // --- Determine container radius ---
-    // Media module takes priority (it contains sliders internally when expanded)
     BOOL isStandaloneSlider = containsAnySlider && !containsMedia;
-    CGFloat radius;
-    if (isStandaloneSlider) {
-        // Standalone sliders: fully rounded (half of shorter side) — never elliptic
-        radius = minDim / 2.0;
-    } else if (opened) {
-        radius = 65.0;
-    } else {
-        radius = getModuleRadius(self);
-    }
+    NSNumber *roundnessValue = [[NSUserDefaults standardUserDefaults] objectForKey:@"cornerRoundness" inDomain:appearanceDomain];
+    CGFloat roundness = roundnessValue ? [roundnessValue floatValue] : 1.0;
+    CGFloat radius = opened ? 65.0 : getModuleRadius(self.bounds, roundness);
 
-    // --- Container border ---
-    // Suppress container border for media/slider/focus when expanded (they handle their own)
     BOOL suppressContainerBorder = opened && (containsMedia || isStandaloneSlider || containsFocus);
-    CGFloat containerBorderWidth = suppressContainerBorder ? 0.0 : 2.0;
-
     self.clipsToBounds = YES;
-    self.layer.cornerRadius = radius;
+    cc26_setContinuousRadius(self, radius);
     self.layer.continuousCorners = YES;
-    self.layer.borderWidth = containerBorderWidth;
-    self.layer.borderColor = [UIColor colorWithWhite:0.5 alpha:0.3].CGColor;
+    self.layer.borderWidth = (showBorders && !suppressContainerBorder) ? 2.0 : 0.0;
+    self.layer.borderColor = self.layer.borderWidth > 0.0 ? [UIColor colorWithWhite:0.5 alpha:0.3].CGColor : nil;
     self.layer.masksToBounds = YES;
 
-    // --- Slider inner views: fully rounded based on their own bounds ---
     if (containsSlider) {
         NSArray *sliders = findAllSubviewsOfClass(self, %c(CCUIContinuousSliderView));
         for (UIView *slider in sliders) {
-            CGFloat sliderMin = fminf(slider.bounds.size.width, slider.bounds.size.height);
-            CGFloat sliderRadius = sliderMin / 2.0;
-            slider.layer.cornerRadius = sliderRadius;
-            slider.layer.continuousCorners = YES;
+            CGFloat sliderRadius = getModuleRadius(slider.bounds, roundness);
+            cc26_setContinuousRadius(slider, sliderRadius);
             slider.clipsToBounds = YES;
-            // Only add border on standalone sliders, not sliders inside media
-            if (isStandaloneSlider) {
-                slider.layer.borderWidth = 1.0;
-                slider.layer.borderColor = [UIColor colorWithWhite:0.5 alpha:0.3].CGColor;
-            }
+            slider.layer.borderWidth = (showBorders && isStandaloneSlider) ? 1.0 : 0.0;
+            slider.layer.borderColor = slider.layer.borderWidth > 0.0 ? [UIColor colorWithWhite:0.5 alpha:0.3].CGColor : nil;
         }
     }
 
-    // --- Stepped slider inner views (e.g. ringer toggle) ---
     if (containsSteppedSlider) {
         NSArray *steppedSliders = findAllSubviewsOfClass(self, %c(CCUISteppedSliderView));
         for (UIView *slider in steppedSliders) {
-            CGFloat sliderMin = fminf(slider.bounds.size.width, slider.bounds.size.height);
-            CGFloat sliderRadius = sliderMin / 2.0;
-            slider.layer.cornerRadius = sliderRadius;
-            slider.layer.continuousCorners = YES;
+            CGFloat sliderRadius = getModuleRadius(slider.bounds, roundness);
+            cc26_setContinuousRadius(slider, sliderRadius);
             slider.clipsToBounds = YES;
         }
     }
 
-    // --- MTMaterialView backgrounds: round to their own bounds ---
-    if (containsAnySlider) {
-        NSArray *materials = findAllSubviewsOfClass(self, %c(MTMaterialView));
-        for (UIView *mat in materials) {
-            CGFloat matMin = fminf(mat.bounds.size.width, mat.bounds.size.height);
-            mat.layer.cornerRadius = matMin / 2.0;
-            mat.layer.continuousCorners = YES;
-            mat.clipsToBounds = YES;
+    UIView *moduleMaterial = nil;
+    @try { moduleMaterial = [self valueForKey:@"moduleMaterialView"]; } @catch (NSException *e) {}
+    if (moduleMaterial) {
+        cc26_setContinuousRadius(moduleMaterial, opened ? 65.0 : getModuleRadius(moduleMaterial.bounds, roundness));
+        moduleMaterial.clipsToBounds = YES;
+        cc26_setMaterialLightness(moduleMaterial, ios18Lightness);
+    }
+    for (UIView *material in findAllSubviewsOfClass(self, %c(MTMaterialView))) {
+        CGFloat materialRadius = getModuleRadius(material.bounds, roundness);
+        UIView *ancestor = material.superview;
+        while (ancestor && ancestor != self && ![ancestor isKindOfClass:%c(CCUIContinuousSliderView)] && ![ancestor isKindOfClass:%c(CCUISteppedSliderView)]) ancestor = ancestor.superview;
+        if ([ancestor isKindOfClass:%c(CCUIContinuousSliderView)] || [ancestor isKindOfClass:%c(CCUISteppedSliderView)]) {
+            materialRadius = getModuleRadius(ancestor.bounds, roundness);
+            materialRadius = MIN(materialRadius, MIN(material.bounds.size.width, material.bounds.size.height) / 2.0);
         }
+        cc26_setContinuousRadius(material, materialRadius);
+        material.clipsToBounds = YES;
+        cc26_setMaterialLightness(material, ios18Lightness);
     }
 
-    // --- Media module: single border on MRUNowPlayingView only when expanded ---
-    if (containsMedia && opened) {
-        UIView *npv = findSubviewOfClass(self, %c(MRUNowPlayingView));
-        if (npv) {
-            npv.layer.cornerRadius = 65.0;
-            npv.layer.continuousCorners = YES;
-            npv.layer.borderWidth = 2.0;
-            npv.layer.borderColor = [UIColor colorWithWhite:0.5 alpha:0.3].CGColor;
-            npv.layer.masksToBounds = YES;
-        }
+    UIView *npv = findSubviewOfClass(self, %c(MRUNowPlayingView));
+    if (npv) {
+        cc26_setContinuousRadius(npv, opened ? 65.0 : getModuleRadius(npv.bounds, roundness));
+        npv.layer.borderWidth = (showBorders && opened) ? 2.0 : 0.0;
+        npv.layer.borderColor = npv.layer.borderWidth > 0.0 ? [UIColor colorWithWhite:0.5 alpha:0.3].CGColor : nil;
+        npv.layer.masksToBounds = YES;
     }
 
-    // --- Focus/Activity module ---
-    if (containsFocus) {
-        UIView *focus = findSubviewOfClass(self, %c(FCUIActivityControl));
-        if (focus) {
-            focus.layer.cornerRadius = 35.0;
-            focus.layer.continuousCorners = YES;
-            focus.layer.borderWidth = 2.0;
-            focus.layer.borderColor = [UIColor colorWithWhite:0.5 alpha:0.3].CGColor;
-            focus.layer.masksToBounds = YES;
-        }
+    UIView *focus = findSubviewOfClass(self, %c(FCUIActivityControl));
+    if (focus) {
+        cc26_setContinuousRadius(focus, getModuleRadius(focus.bounds, roundness));
+        focus.layer.borderWidth = showBorders ? 2.0 : 0.0;
+        focus.layer.borderColor = focus.layer.borderWidth > 0.0 ? [UIColor colorWithWhite:0.5 alpha:0.3].CGColor : nil;
+        focus.layer.masksToBounds = YES;
     }
 }
 %end
@@ -711,17 +484,13 @@ static BOOL cc26ControlsLayoutInProgress = NO;
         // Power-Button
         UIButton *power = [view viewWithTag:998];
         if (!power) {
-            NSDictionary *powerColorDict = [[NSUserDefaults standardUserDefaults] objectForKey:@"powerButtonColorDict" inDomain:domain];
-            UIColor *powerColor = (powerColorDict != nil) ? [UIColor colorWithRed:[powerColorDict[@"red"] floatValue] green:[powerColorDict[@"green"] floatValue] blue:[powerColorDict[@"blue"] floatValue] alpha:1.0] : [UIColor systemRedColor];
-
             power = [UIButton buttonWithType:UIButtonTypeSystem];
             power.tag = 998;
 
-            UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:iconSize weight:UIImageSymbolWeightRegular];
-            UIImage *powerImage = [[UIImage systemImageNamed:@"power"] imageByApplyingSymbolConfiguration:config];
+            UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:19.0 weight:UIImageSymbolWeightMedium];
+            UIImage *powerImage = [[UIImage systemImageNamed:@"power" withConfiguration:config] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 
             [power setImage:powerImage forState:UIControlStateNormal];
-            power.tintColor = powerColor;
             power.alpha = 0.0;
             power.transform = CGAffineTransformMakeScale(0.6, 0.6);
             power.frame = CGRectMake(view.bounds.size.width - safeRight - buttonSize, yOffset - 10, buttonSize, buttonSize);
@@ -767,6 +536,14 @@ static BOOL cc26ControlsLayoutInProgress = NO;
 
             [view addSubview:power];
         }
+
+        NSDictionary *addColorDict = [[NSUserDefaults standardUserDefaults] objectForKey:@"addButtonColorDict" inDomain:domain];
+        UIColor *addColor = addColorDict ? [UIColor colorWithRed:[addColorDict[@"red"] floatValue] green:[addColorDict[@"green"] floatValue] blue:[addColorDict[@"blue"] floatValue] alpha:1.0] : [UIColor whiteColor];
+        plus.tintColor = addColor;
+
+        NSDictionary *powerColorDict = [[NSUserDefaults standardUserDefaults] objectForKey:@"powerButtonColorDict" inDomain:domain];
+        UIColor *powerColor = powerColorDict ? [UIColor colorWithRed:[powerColorDict[@"red"] floatValue] green:[powerColorDict[@"green"] floatValue] blue:[powerColorDict[@"blue"] floatValue] alpha:1.0] : [UIColor whiteColor];
+        power.tintColor = powerColor;
 
         // Update Frames (z. B. bei Rotation)
         plus.frame = CGRectMake(safeLeft - 10, yOffset - 10, buttonSize + 15, buttonSize + 15);
@@ -815,6 +592,12 @@ static void loadPreferences(CFNotificationCenterRef center, void *observer, CFSt
     enableTopButtons = (enableTopButtonsValue) ? [enableTopButtonsValue boolValue] : YES;
     NSNumber *colorSliderGlyphsValue = (NSNumber *)[[NSUserDefaults standardUserDefaults] objectForKey:@"colorSliderGlyphs" inDomain:domain];
     colorSliderGlyphs = (colorSliderGlyphsValue) ? [colorSliderGlyphsValue boolValue] : YES;
+    NSNumber *showBordersValue = (NSNumber *)[[NSUserDefaults standardUserDefaults] objectForKey:@"showBorders" inDomain:appearanceDomain];
+    showBorders = showBordersValue ? [showBordersValue boolValue] : NO;
+    NSNumber *lightnessValue = (NSNumber *)[[NSUserDefaults standardUserDefaults] objectForKey:@"ios18Lightness" inDomain:appearanceDomain];
+    ios18Lightness = lightnessValue ? [lightnessValue boolValue] : YES;
+    NSNumber *roundnessValue = (NSNumber *)[[NSUserDefaults standardUserDefaults] objectForKey:@"cornerRoundness" inDomain:appearanceDomain];
+    cornerRoundness = roundnessValue ? MIN(1.5, MAX(0.5, [roundnessValue floatValue])) : 1.0;
 
     // Media player position overrides (-1 = default)
     NSNumber *val;
@@ -845,6 +628,7 @@ static void loadPreferences(CFNotificationCenterRef center, void *observer, CFSt
 %ctor {
     loadPreferences(NULL, NULL, NULL, NULL, NULL); // Load prefs
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, loadPreferences, (CFStringRef)preferencesNotification, NULL, CFNotificationSuspensionBehaviorCoalesce);
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, loadPreferences, (CFStringRef)appearanceNotification, NULL, CFNotificationSuspensionBehaviorCoalesce);
     if (enabled) {
         %init(CC26)
     }

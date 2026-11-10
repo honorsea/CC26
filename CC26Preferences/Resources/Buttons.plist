@@ -27,8 +27,6 @@
 			<string></string>
 		</dict>
 		<dict>
-            <key>PostNotification</key>
-            <string>com.cureux.cc26/preferences.changed</string>
             <key>cellClass</key>
             <string>CC26ColorCell</string>
             <key>defaults</key>
@@ -41,12 +39,12 @@
             <string>addButtonColor</string>
             <key>key</key>
             <string>addButtonColor</string>
+            <key>PostNotification</key>
+            <string>com.cureux.cc26/preferences.changed</string>
             <key>label</key>
             <string>Add Button Color</string>
         </dict>
 		<dict>
-            <key>PostNotification</key>
-            <string>com.cureux.cc26/preferences.changed</string>
             <key>cellClass</key>
             <string>CC26ColorCell</string>
             <key>defaults</key>
@@ -54,11 +52,13 @@
             <key>height</key>
             <string>60</string>
             <key>fallbackColor</key>
-            <string>#FF3B30</string>
+            <string>#FFFFFF</string>
             <key>id</key>
             <string>powerButtonColor</string>
             <key>key</key>
             <string>powerButtonColor</string>
+            <key>PostNotification</key>
+            <string>com.cureux.cc26preferences/ReloadPrefs</string>
             <key>label</key>
             <string>Power Button Color</string>
         </dict>
