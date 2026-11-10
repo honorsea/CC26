@@ -4,7 +4,7 @@
 #import <Preferences/PSSpecifier.h>
 #import <Preferences/PSControlTableCell.h>
 #import <Preferences/PSSwitchTableCell.h>
-#include <rootless.h>
+#include "../CC26RootCompat.h"
 
 static NSString *domain = @"com.cureux.cc26";
 

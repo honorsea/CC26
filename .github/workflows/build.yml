@@ -1,0 +1,39 @@
+name: Build CC26 (Roothide, new arm64e ABI)
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          brew install ldid dpkg make
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Get Theos (Roothide fork)
+        run: |
+          git clone --depth 1 --recursive --shallow-submodules https://github.com/roothide/theos "$HOME/theos"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+
+      - name: Build roothide package
+        run: |
+          make package ROOTHIDE=1 THEOS_PACKAGE_SCHEME=roothide FINALPACKAGE=1 \
+            TARGET=iphone:clang:latest:14.0 PACKAGE_VERSION=1.0.2.2 \
+            ADDITIONAL_CFLAGS=-Wno-unguarded-availability-new
+
+      - name: Show package info and arm64e ABI
+        run: |
+          DEB=$(ls packages/*.deb | head -n1)
+          dpkg-deb -f "$DEB"
+          mkdir x && dpkg-deb -x "$DEB" x
+          lipo -detailed_info "$(find x -name CC26.dylib | head -n1)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CC26-roothide-deb
+          path: packages/*.deb

@@ -28,6 +28,9 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = CC26
 $(TWEAK_NAME)_FILES = Tweak.xm CC26Preferences/CC26LocalizableManager.m
 $(TWEAK_NAME)_CFLAGS = -fobjc-arc -Wno-error -fno-modules
+ifeq ($(THEOS_PACKAGE_SCHEME),roothide)
+$(TWEAK_NAME)_LDFLAGS += -lroothide
+endif
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
